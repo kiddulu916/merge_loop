@@ -4,6 +4,29 @@
 <dict>
 	<key>GADApplicationIdentifier</key>
 	<string>ca-app-pub-4807961095325796~2255720130</string>
+	<!-- Contacts is OPT-IN and used ONLY to find friends already on Merge Loop.
+	     Raw phone numbers / emails NEVER leave your device — they are hashed
+	     on-device and only the hashes are checked. Denying this keeps friend
+	     codes fully usable. -->
+	<key>NSContactsUsageDescription</key>
+	<string>Merge Loop can find friends who already play. Your contacts never leave your device — only secure, anonymized fingerprints are checked. You can always add friends by code instead.</string>
+	<!-- Invite deep links: mergeloop://invite/<code> -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>com.mergeloop.invite</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>mergeloop</string>
+			</array>
+		</dict>
+	</array>
+	<!-- Universal Links (https) require an associated-domains entitlement +
+	     apple-app-site-association hosted on mergeloop.app; see spec Open Items.
+	     The custom scheme above works without that setup. -->
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>

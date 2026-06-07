@@ -14,7 +14,12 @@ import 'score_share_screen.dart';
 
 class GameScreen extends StatelessWidget {
   final AdService adService;
-  const GameScreen({super.key, required this.adService});
+
+  /// The player's friend code, when online. Passed to [ScoreShareScreen] so the
+  /// share card carries an invite link and the "Invite a friend" CTA appears.
+  final String? friendCode;
+
+  const GameScreen({super.key, required this.adService, this.friendCode});
 
   @override
   Widget build(BuildContext context) {
@@ -45,6 +50,7 @@ class GameScreen extends StatelessWidget {
                         board: board,
                         date: date,
                         stats: stats,
+                        friendCode: friendCode,
                         canOfferAd: context.read<GameCubit>().canOfferAd,
                         onWatchAd: () =>
                             _watchRewarded(context, context.read<GameCubit>()),

@@ -6,9 +6,11 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../application/game_cubit.dart';
 import '../../domain/models/difficulty.dart';
 import '../../infrastructure/ad_service.dart';
+import '../../infrastructure/friends_service.dart';
 import '../../infrastructure/leaderboard_service.dart';
 import '../../infrastructure/storage_service.dart';
 import '../theme/tile_palette.dart';
+import 'friends_screen.dart';
 import 'game_screen.dart';
 import 'leaderboard_screen.dart';
 
@@ -23,6 +25,10 @@ class TierSelectScreen extends StatefulWidget {
   /// the leaderboard entry points are then hidden.
   final LeaderboardService? leaderboard;
 
+  /// Friends service. Null when offline — the Friends entry point and the
+  /// Global/Friends toggle are then hidden.
+  final FriendsService? friends;
+
   /// Override for tests; defaults to the real UTC date string.
   final String Function()? todayProvider;
 
@@ -36,6 +42,7 @@ class TierSelectScreen extends StatefulWidget {
     required this.storage,
     required this.adService,
     this.leaderboard,
+    this.friends,
     this.todayProvider,
     this.onTierSelected,
   });
@@ -50,6 +57,9 @@ class _TierSelectScreenState extends State<TierSelectScreen> {
   Timer? _ticker;
   Duration _untilReset = Duration.zero;
 
+  /// Cached so the share screen can offer an invite link without an extra RPC.
+  String? _friendCode;
+
   @override
   void initState() {
     super.initState();
@@ -58,6 +68,18 @@ class _TierSelectScreenState extends State<TierSelectScreen> {
       if (!mounted) return;
       setState(() => _untilReset = _computeUntilReset());
     });
+    _loadFriendCode();
+  }
+
+  Future<void> _loadFriendCode() async {
+    final friends = widget.friends;
+    if (friends == null) return;
+    try {
+      final code = await friends.myFriendCode();
+      if (mounted) setState(() => _friendCode = code);
+    } catch (_) {
+      // Offline; share card simply omits the invite link.
+    }
   }
 
   @override
@@ -92,8 +114,22 @@ class _TierSelectScreenState extends State<TierSelectScreen> {
       MaterialPageRoute<void>(
         builder: (_) => LeaderboardScreen(
           service: service,
+          friendsService: widget.friends,
           initialDifficulty: difficulty,
           todayProvider: widget.todayProvider,
+        ),
+      ),
+    );
+  }
+
+  void _openFriends(BuildContext context) {
+    final service = widget.friends;
+    if (service == null) return;
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => FriendsScreen(
+          service: service,
+          todayProvider: widget.today,
         ),
       ),
     );
@@ -110,7 +146,10 @@ class _TierSelectScreenState extends State<TierSelectScreen> {
         builder: (_) => BlocProvider(
           create: (_) => GameCubit(storage: widget.storage)
             ..init(difficulty: difficulty),
-          child: GameScreen(adService: widget.adService),
+          child: GameScreen(
+            adService: widget.adService,
+            friendCode: _friendCode,
+          ),
         ),
       ),
     );
@@ -127,12 +166,27 @@ class _TierSelectScreenState extends State<TierSelectScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const SizedBox(height: 8),
-              const Text('Merge Loop',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 32,
-                      fontWeight: FontWeight.w900)),
+              Stack(
+                alignment: Alignment.center,
+                children: [
+                  const Text('Merge Loop',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 32,
+                          fontWeight: FontWeight.w900)),
+                  if (widget.friends != null)
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: IconButton(
+                        key: const Key('open-friends'),
+                        tooltip: 'Friends',
+                        icon: const Icon(Icons.group, color: Colors.white70),
+                        onPressed: () => _openFriends(context),
+                      ),
+                    ),
+                ],
+              ),
               const SizedBox(height: 4),
               const Text('Choose your daily challenge',
                   textAlign: TextAlign.center,
