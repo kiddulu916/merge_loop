@@ -6,9 +6,11 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../application/game_cubit.dart';
 import '../../domain/models/difficulty.dart';
 import '../../infrastructure/ad_service.dart';
+import '../../infrastructure/leaderboard_service.dart';
 import '../../infrastructure/storage_service.dart';
 import '../theme/tile_palette.dart';
 import 'game_screen.dart';
+import 'leaderboard_screen.dart';
 
 /// Entry screen: pick a difficulty tier. Each card shows the starting tile
 /// count, whether the tier is already done today, and a live countdown to the
@@ -16,6 +18,10 @@ import 'game_screen.dart';
 class TierSelectScreen extends StatefulWidget {
   final StorageService storage;
   final AdService adService;
+
+  /// Online leaderboard service. Null when offline / Supabase not configured —
+  /// the leaderboard entry points are then hidden.
+  final LeaderboardService? leaderboard;
 
   /// Override for tests; defaults to the real UTC date string.
   final String Function()? todayProvider;
@@ -29,6 +35,7 @@ class TierSelectScreen extends StatefulWidget {
     super.key,
     required this.storage,
     required this.adService,
+    this.leaderboard,
     this.todayProvider,
     this.onTierSelected,
   });
@@ -76,6 +83,20 @@ class _TierSelectScreenState extends State<TierSelectScreen> {
   bool _isCompleted(Difficulty d) {
     final today = widget.today();
     return widget.storage.loadSnapshot(today, d)?.completed ?? false;
+  }
+
+  void _openLeaderboard(BuildContext context, Difficulty difficulty) {
+    final service = widget.leaderboard;
+    if (service == null) return;
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => LeaderboardScreen(
+          service: service,
+          initialDifficulty: difficulty,
+          todayProvider: widget.todayProvider,
+        ),
+      ),
+    );
   }
 
   void _startTier(BuildContext context, Difficulty difficulty) {
@@ -188,6 +209,13 @@ class _TierSelectScreenState extends State<TierSelectScreen> {
                     ],
                   ),
                 ),
+                if (widget.leaderboard != null)
+                  IconButton(
+                    key: Key('leaderboard-${d.name}'),
+                    tooltip: 'Leaderboard',
+                    icon: const Icon(Icons.leaderboard, color: Colors.white54),
+                    onPressed: () => _openLeaderboard(context, d),
+                  ),
                 if (completed)
                   const Text('Done today ✓',
                       style: TextStyle(

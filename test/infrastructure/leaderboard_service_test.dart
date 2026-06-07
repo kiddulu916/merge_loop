@@ -1,0 +1,125 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:merge_loop/domain/models/difficulty.dart';
+import 'package:merge_loop/domain/models/move.dart';
+import 'package:merge_loop/infrastructure/leaderboard_service.dart';
+
+void main() {
+  group('LeaderboardService.submitRun', () {
+    test('sends move log (not a score) with date + difficulty', () async {
+      String? capturedFn;
+      Map<String, dynamic>? capturedBody;
+      final service = LeaderboardService.withSeams(
+        invoke: (fn, body) async {
+          capturedFn = fn;
+          capturedBody = body;
+          return {'valid': true, 'score': 1240, 'highestTier': 7, 'rank': 42};
+        },
+        rpc: (_, __) async => const [],
+      );
+
+      final result = await service.submitRun(
+        date: '2026-06-07',
+        difficulty: Difficulty.hard,
+        moveLog: const [
+          MergeEvent(from: 3, to: 8),
+          MergeEvent(from: 1, to: 2),
+          ContinueEvent(),
+        ],
+      );
+
+      expect(capturedFn, 'submit-score');
+      expect(capturedBody!['date'], '2026-06-07');
+      expect(capturedBody!['difficulty'], 'hard');
+      // The client must NOT send a score — only the move log.
+      expect(capturedBody!.containsKey('score'), isFalse);
+      expect(capturedBody!['moveLog'], [
+        {'type': 'merge', 'from': 3, 'to': 8},
+        {'type': 'merge', 'from': 1, 'to': 2},
+        {'type': 'continue'},
+      ]);
+
+      expect(result.valid, isTrue);
+      expect(result.score, 1240);
+      expect(result.highestTier, 7);
+      expect(result.rank, 42);
+    });
+
+    test('maps a rejected (invalid) run response', () async {
+      final service = LeaderboardService.withSeams(
+        invoke: (_, __) async => {'valid': false, 'reason': 'invalid_run'},
+        rpc: (_, __) async => const [],
+      );
+      final result = await service.submitRun(
+        date: '2026-06-07',
+        difficulty: Difficulty.easy,
+        moveLog: const [],
+      );
+      expect(result.valid, isFalse);
+      expect(result.score, 0);
+      expect(result.rank, 0);
+    });
+
+    test('propagates transport errors so callers can retry', () async {
+      final service = LeaderboardService.withSeams(
+        invoke: (_, __) async => throw Exception('network down'),
+        rpc: (_, __) async => const [],
+      );
+      expect(
+        () => service.submitRun(
+          date: '2026-06-07',
+          difficulty: Difficulty.easy,
+          moveLog: const [],
+        ),
+        throwsException,
+      );
+    });
+  });
+
+  group('LeaderboardService.fetch', () {
+    test('calls the leaderboard RPC with date/diff/limit and maps rows',
+        () async {
+      String? capturedFn;
+      Map<String, dynamic>? capturedParams;
+      final service = LeaderboardService.withSeams(
+        invoke: (_, __) async => const {},
+        rpc: (fn, params) async {
+          capturedFn = fn;
+          capturedParams = params;
+          return [
+            {'rank': 1, 'display_name': 'Ada', 'score': 980, 'is_me': false},
+            {'rank': 2, 'display_name': 'Me', 'score': 870, 'is_me': true},
+          ];
+        },
+      );
+
+      final entries = await service.fetch(
+        difficulty: Difficulty.legendary,
+        date: '2026-06-07',
+        limit: 50,
+      );
+
+      expect(capturedFn, 'leaderboard');
+      expect(capturedParams, {
+        'p_date': '2026-06-07',
+        'p_diff': 'legendary',
+        'p_limit': 50,
+      });
+      expect(entries.length, 2);
+      expect(entries[0].rank, 1);
+      expect(entries[0].displayName, 'Ada');
+      expect(entries[0].isMe, isFalse);
+      expect(entries[1].isMe, isTrue);
+      expect(entries[1].score, 870);
+    });
+
+    test('returns an empty list when there are no scores', () async {
+      final service = LeaderboardService.withSeams(
+        invoke: (_, __) async => const {},
+        rpc: (_, __) async => const [],
+      );
+      final entries =
+          await service.fetch(difficulty: Difficulty.easy, date: '2026-06-07');
+      expect(entries, isEmpty);
+    });
+  });
+}

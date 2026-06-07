@@ -22,9 +22,22 @@ String utcToday() => formatDate(DateTime.now().toUtc());
 /// Orchestrates the daily game for one difficulty tier. **Call [init] before any
 /// other method** — `merge`/`grantAdReward` rely on fields set up there (they
 /// are also guarded by the state machine, which starts in [GameInitial]).
+/// Hands a finalized day off to the online submit flow (Phase 2). Called once
+/// when a tier's day is locked. Decoupled from supabase_flutter so the cubit
+/// stays plugin-free and unit-testable.
+typedef SubmitRun = Future<void> Function({
+  required String date,
+  required Difficulty difficulty,
+  required List<MoveEvent> moveLog,
+  required int adContinues,
+});
+
 class GameCubit extends Cubit<GameState> {
   final StorageService storage;
   final String Function() todayProvider;
+
+  /// Optional online submit hook. Null when offline / not signed in.
+  final SubmitRun? onSubmitRun;
 
   late Difficulty _difficulty;
   late String _date;
@@ -34,6 +47,7 @@ class GameCubit extends Cubit<GameState> {
   GameCubit({
     required this.storage,
     String Function()? todayProvider,
+    this.onSubmitRun,
   })  : todayProvider = todayProvider ?? utcToday,
         super(const GameInitial());
 
@@ -101,8 +115,37 @@ class GameCubit extends Cubit<GameState> {
       final stats = await _recordCompletion(board);
       emit(GameOverShowScore(
           board: board, date: _date, difficulty: _difficulty, stats: stats));
+      // Submit to the leaderboard only when the day is genuinely terminal:
+      // deadlocked, or out of moves with no remaining ad-continue offer. This
+      // avoids submitting before the player takes an available ad continue.
+      final terminal = board.status == GameStatus.deadlocked ||
+          board.adContinuesUsed >= kMaxAdContinuesPerDay ||
+          !GameEngine.hasMergeAvailable(board);
+      if (terminal) {
+        await _submit(board);
+      }
     } else {
       emit(GamePlaying(board: board, difficulty: _difficulty));
+    }
+  }
+
+  bool _submitted = false;
+
+  /// Fire the online submit hook at most once per cubit lifetime.
+  Future<void> _submit(BoardState board) async {
+    final hook = onSubmitRun;
+    if (hook == null || _submitted) return;
+    _submitted = true;
+    try {
+      await hook(
+        date: _date,
+        difficulty: _difficulty,
+        moveLog: board.moveLog,
+        adContinues: board.adContinuesUsed,
+      );
+    } catch (_) {
+      // Submission is off the critical path; the result screen never blocks.
+      // Offline queue/retry is handled by the caller's service (future work).
     }
   }
 
