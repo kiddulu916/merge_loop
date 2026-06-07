@@ -114,7 +114,13 @@ Pure functions return **new** `BoardState`s (no mutation). Example surface:
 - **Feedback:** `AnimatedScale` pop on the merged tile; `AnimatedPositioned` slide for the source tile and the new drop; `HapticFeedback.mediumImpact()` per merge. Target 60fps, implicit animations only, no Flame.
 - **Screens:**
   - `GameScreen`: moves counter, live score, board, persistent bottom **banner slot**.
-  - `ScoreShareScreen`: final board snapshot, score, highest tile, **Share** button, countdown to next calendar day. Reached directly on relaunch if today is already complete.
+  - `ScoreShareScreen`: see §4.1. Reached directly on relaunch if today is already complete.
+
+### 4.1 Daily result display (offline model)
+Because the game is fully offline, there is **no in-app ranking** of other players (that would require a backend — see §10). The result screen is the player's own daily card and the **emoji share** is the comparison mechanism: since every player got the *identical* board, pasting results into a chat *is* the leaderboard (the Wordle model). The screen shows:
+- **Today:** final score, highest tile reached, moves used (e.g. `24/30`), final board snapshot.
+- **Personal stats (local, offline):** current daily **streak**, **best-ever score**, **best-ever tier**. Sourced from Hive lifetime stats (§6); no network, no accounts.
+- **Share** button (emoji grid, §5.4) and a **countdown** to the next calendar day.
 
 ---
 
@@ -181,4 +187,12 @@ Pure functions return **new** `BoardState`s (no mutation). Example surface:
 
 ## 9. Out of scope (YAGNI)
 
-No backend/leaderboards/accounts, no cloud sync, no Flame engine, no in-app purchases beyond ad units, no localization pass, no tablet-specific layout in v1.
+No cloud sync, no Flame engine, no in-app purchases beyond ad units, no localization pass, no tablet-specific layout in v1. Global/friends leaderboards and social integrations are deferred — see §10.
+
+## 10. Deferred to Phase 2 (separate spec)
+
+A future, separately-brainstormed spec will cover social/competitive features. Recorded here so the boundary is explicit:
+
+- **Global daily leaderboard** and **friends leaderboard** — both require a backend to aggregate player-specific scores; they are **impossible while v1 stays fully offline** (the zero-backend pillar, §1). Implementing them means first revisiting the zero-backend pillar (e.g. a serverless free-tier DB with anonymous IDs + a privacy policy).
+- **Invite a friend** — achievable offline via the OS **native share sheet** + an app **deep link / friend code**; intentionally held for Phase 2 to keep v1 focused.
+- **Social-platform reality (for the Phase 2 author):** Facebook `user_friends` returns only friends who already use the app and consented (no full friends list, requires App Review); **Instagram has no third-party friends API** and its Basic Display API shut down Dec 2024; platform "invite friends" APIs are deprecated. The realistic ceiling is an anonymous global leaderboard + app-native friend codes, with Facebook *Login* as optional friend auto-matching and Instagram as a share *target* only.
