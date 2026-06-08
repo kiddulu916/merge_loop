@@ -1,11 +1,14 @@
+import 'dart:typed_data';
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:flutter/rendering.dart';
 import 'package:share_plus/share_plus.dart';
 
-import '../../domain/engine/share_grid_builder.dart';
 import '../../domain/models/achievement.dart';
 import '../../domain/models/board_state.dart';
 import '../../infrastructure/friends_service.dart';
+import '../../infrastructure/score_sharer.dart';
 import '../../infrastructure/storage_service.dart';
 
 /// Offline daily result: the player's own score/tier/moves plus local personal
@@ -13,6 +16,8 @@ import '../../infrastructure/storage_service.dart';
 /// code is available, the share card carries an invite link and a dedicated
 /// "invite a friend" CTA is shown (Phase 3 growth lever).
 class ScoreShareScreen extends StatelessWidget {
+  /// Wraps the visual card so it can be rasterised for sharing.
+  final GlobalKey _cardKey = GlobalKey();
   final BoardState board;
   final String date;
   final LifetimeStats stats;
@@ -32,7 +37,15 @@ class ScoreShareScreen extends StatelessWidget {
   /// Seam: native share. Defaults to [share_plus]. Tests inject a fake.
   final Future<void> Function(String text)? shareText;
 
-  const ScoreShareScreen({
+  /// Performs the actual score share. Production uses [PlatformScoreSharer];
+  /// tests inject a fake.
+  final ScoreSharer sharer;
+
+  /// Test seam: returns the PNG bytes to share, bypassing real rendering.
+  /// Production leaves this null and captures the on-screen card.
+  final Future<Uint8List?> Function()? captureOverride;
+
+  ScoreShareScreen({
     super.key,
     required this.board,
     required this.date,
@@ -43,6 +56,8 @@ class ScoreShareScreen extends StatelessWidget {
     this.friendCode,
     this.newlyUnlocked = const {},
     this.shareText,
+    this.sharer = const PlatformScoreSharer(),
+    this.captureOverride,
   });
 
   @override
@@ -56,29 +71,41 @@ class ScoreShareScreen extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Text('Daily Result',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 28,
-                      fontWeight: FontWeight.w800)),
-              const SizedBox(height: 24),
-              _bigStat('SCORE', '${board.score}'),
-              const SizedBox(height: 12),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  _smallStat('BEST TILE', '${1 << board.highestTier}'),
-                  _smallStat('MOVES', '${board.movesMade}'),
-                  _smallStat('STREAK', '${stats.streak}'),
-                ],
+              RepaintBoundary(
+                key: _cardKey,
+                child: Container(
+                  color: const Color(0xFF12141C),
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Text('Daily Result',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 28,
+                              fontWeight: FontWeight.w800)),
+                      const SizedBox(height: 24),
+                      _bigStat('SCORE', '${board.score}'),
+                      const SizedBox(height: 12),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          _smallStat('BEST TILE', '${1 << board.highestTier}'),
+                          _smallStat('MOVES', '${board.movesMade}'),
+                          _smallStat('STREAK', '${stats.streak}'),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      _smallStat('BEST EVER', '${stats.bestScore}'),
+                      if (newlyUnlocked.isNotEmpty) ...[
+                        const SizedBox(height: 20),
+                        _achievementsBanner(),
+                      ],
+                    ],
+                  ),
+                ),
               ),
-              const SizedBox(height: 8),
-              _smallStat('BEST EVER', '${stats.bestScore}'),
-              if (newlyUnlocked.isNotEmpty) ...[
-                const SizedBox(height: 20),
-                _achievementsBanner(),
-              ],
               const SizedBox(height: 24),
               if (canOfferAd)
                 FilledButton.tonal(
@@ -115,28 +142,22 @@ class ScoreShareScreen extends StatelessWidget {
     );
   }
 
-  /// The shareable card text: the emoji grid, plus an invite link when online.
-  String _cardText() {
-    final grid = ShareGridBuilder.build(date: date, board: board);
-    if (friendCode == null) return grid;
-    return '$grid\n\nPlay & add me: ${FriendsService.inviteLink(friendCode!)}';
+  Future<Uint8List?> _capture() async {
+    final override = captureOverride;
+    if (override != null) return override();
+    final ctx = _cardKey.currentContext;
+    if (ctx == null) return null;
+    final boundary = ctx.findRenderObject() as RenderRepaintBoundary;
+    final image = await boundary.toImage(pixelRatio: 3.0);
+    final data = await image.toByteData(format: ui.ImageByteFormat.png);
+    return data?.buffer.asUint8List();
   }
 
   Future<void> _share(BuildContext context) async {
-    final text = _cardText();
-    final share = shareText;
-    if (share != null) {
-      await share(text);
-      return;
-    }
-    // Default: copy to clipboard (works headlessly + offline). Production wires
-    // [shareText] to share_plus's native sheet; see [_nativeShare].
-    await Clipboard.setData(ClipboardData(text: text));
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Result copied to clipboard!')),
-      );
-    }
+    final png = await _capture();
+    if (png == null) return;
+    final reached = await sharer.shareToFacebook(png);
+    if (!reached) await sharer.shareToSheet(png);
   }
 
   Future<void> _invite(BuildContext context) async {

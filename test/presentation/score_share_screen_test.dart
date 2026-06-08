@@ -1,9 +1,12 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:merge_loop/domain/constants.dart';
 import 'package:merge_loop/domain/models/board_state.dart';
 import 'package:merge_loop/domain/models/game_status.dart';
 import 'package:merge_loop/domain/models/tile.dart';
+import 'package:merge_loop/infrastructure/score_sharer.dart';
 import 'package:merge_loop/infrastructure/storage_service.dart';
 import 'package:merge_loop/presentation/screens/score_share_screen.dart';
 
@@ -24,6 +27,24 @@ BoardState _board() {
 
 const _stats = LifetimeStats(
     streak: 4, lastCompletedDate: '2026-06-06', bestScore: 5000, bestTier: 9);
+
+class _FakeSharer implements ScoreSharer {
+  _FakeSharer(this.facebookSucceeds);
+  final bool facebookSucceeds;
+  int fbCalls = 0;
+  int sheetCalls = 0;
+
+  @override
+  Future<bool> shareToFacebook(Uint8List pngBytes) async {
+    fbCalls++;
+    return facebookSucceeds;
+  }
+
+  @override
+  Future<void> shareToSheet(Uint8List pngBytes) async {
+    sheetCalls++;
+  }
+}
 
 void main() {
   testWidgets('shows the core stats', (tester) async {
@@ -71,5 +92,48 @@ void main() {
       ),
     ));
     expect(find.byKey(const Key('main-menu-button')), findsNothing);
+  });
+
+  testWidgets('Share sends the screenshot to Facebook', (tester) async {
+    final sharer = _FakeSharer(true);
+    await tester.pumpWidget(MaterialApp(
+      home: ScoreShareScreen(
+        board: _board(),
+        date: '2026-06-06',
+        stats: _stats,
+        canOfferAd: false,
+        onWatchAd: () {},
+        sharer: sharer,
+        captureOverride: () async => Uint8List.fromList([1, 2, 3]),
+      ),
+    ));
+
+    await tester.tap(find.byKey(const Key('share-card-button')));
+    await tester.pumpAndSettle();
+
+    expect(sharer.fbCalls, 1);
+    expect(sharer.sheetCalls, 0);
+  });
+
+  testWidgets('Share falls back to the OS sheet when Facebook is absent',
+      (tester) async {
+    final sharer = _FakeSharer(false);
+    await tester.pumpWidget(MaterialApp(
+      home: ScoreShareScreen(
+        board: _board(),
+        date: '2026-06-06',
+        stats: _stats,
+        canOfferAd: false,
+        onWatchAd: () {},
+        sharer: sharer,
+        captureOverride: () async => Uint8List.fromList([1, 2, 3]),
+      ),
+    ));
+
+    await tester.tap(find.byKey(const Key('share-card-button')));
+    await tester.pumpAndSettle();
+
+    expect(sharer.fbCalls, 1);
+    expect(sharer.sheetCalls, 1);
   });
 }
