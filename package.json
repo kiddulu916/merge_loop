@@ -1,7 +1,7 @@
 {
-  "name": "merge_loop",
+  "name": "merge_count",
   "version": "1.0.0",
-  "description": "��#\u0000 \u0000m\u0000e\u0000r\u0000g\u0000e\u0000_\u0000l\u0000o\u0000o\u0000p\u0000\r\u0000 \u0000",
+  "description": "# merge_count",
   "main": "index.js",
   "directories": {
     "doc": "docs",
@@ -13,16 +13,16 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/kiddulu916/merge_loop.git"
+    "url": "git+https://github.com/kiddulu916/merge_count.git"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "bugs": {
-    "url": "https://github.com/kiddulu916/merge_loop/issues"
+    "url": "https://github.com/kiddulu916/merge_count/issues"
   },
-  "homepage": "https://github.com/kiddulu916/merge_loop#readme",
+  "homepage": "https://github.com/kiddulu916/merge_count#readme",
   "devDependencies": {
     "supabase": "^2.105.0"
   }

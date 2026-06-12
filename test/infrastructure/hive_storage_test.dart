@@ -13,7 +13,7 @@ import 'package:merge_count/infrastructure/storage_service.dart';
 void main() {
   setUp(() {
     // Use a unique temp dir so each test run is isolated.
-    Hive.init('${Directory.systemTemp.path}/merge_loop_test_${DateTime.now().microsecondsSinceEpoch}');
+    Hive.init('${Directory.systemTemp.path}/merge_count_test_${DateTime.now().microsecondsSinceEpoch}');
   });
 
   tearDown(() async {
