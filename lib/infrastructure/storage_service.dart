@@ -1,4 +1,6 @@
+import '../domain/constants.dart';
 import '../domain/models/board_state.dart';
+import '../domain/models/day_result.dart';
 import '../domain/models/difficulty.dart';
 
 /// A persisted in-progress (or finished) day for a single difficulty tier.
@@ -159,6 +161,15 @@ class PlayerProfile {
   /// empty.
   final Map<String, int> lastSeenRivalScoreByTier;
 
+  /// Whether the first-run tutorial overlay has been shown+dismissed (Phase 4).
+  /// Gates the one-time coachmarks. Migration-free default false.
+  final bool tutorialSeen;
+
+  /// Whether colorblind-safe tile patterns are enabled (Phase 4). Numerals are
+  /// always rendered; this opt-in adds a per-tier pattern overlay so tiles are
+  /// distinguishable without hue. Migration-free default false.
+  final bool colorblindMode;
+
   const PlayerProfile({
     this.dailyActiveStreak = 0,
     this.lastActiveDate,
@@ -176,6 +187,8 @@ class PlayerProfile {
     this.rivalId,
     this.rivalName,
     this.lastSeenRivalScoreByTier = const {},
+    this.tutorialSeen = false,
+    this.colorblindMode = false,
   });
 
   static const empty = PlayerProfile();
@@ -198,6 +211,8 @@ class PlayerProfile {
     bool clearRival = false,
     String? rivalName,
     Map<String, int>? lastSeenRivalScoreByTier,
+    bool? tutorialSeen,
+    bool? colorblindMode,
   }) =>
       PlayerProfile(
         dailyActiveStreak: dailyActiveStreak ?? this.dailyActiveStreak,
@@ -219,6 +234,8 @@ class PlayerProfile {
         rivalName: clearRival ? null : (rivalName ?? this.rivalName),
         lastSeenRivalScoreByTier:
             lastSeenRivalScoreByTier ?? this.lastSeenRivalScoreByTier,
+        tutorialSeen: tutorialSeen ?? this.tutorialSeen,
+        colorblindMode: colorblindMode ?? this.colorblindMode,
       );
 
   Map<String, dynamic> toJson() => {
@@ -238,6 +255,8 @@ class PlayerProfile {
         'rivalId': rivalId,
         'rivalName': rivalName,
         'lastSeenRivalScoreByTier': lastSeenRivalScoreByTier,
+        'tutorialSeen': tutorialSeen,
+        'colorblindMode': colorblindMode,
       };
 
   static PlayerProfile fromJson(Map<String, dynamic> j) => PlayerProfile(
@@ -271,6 +290,9 @@ class PlayerProfile {
         lastSeenRivalScoreByTier:
             ((j['lastSeenRivalScoreByTier'] as Map?) ?? const {})
                 .map((k, v) => MapEntry(k as String, (v as num).toInt())),
+        // Absent in pre-Phase-4 profiles: migration-free defaults.
+        tutorialSeen: (j['tutorialSeen'] as bool?) ?? false,
+        colorblindMode: (j['colorblindMode'] as bool?) ?? false,
       );
 }
 
@@ -291,12 +313,21 @@ abstract class StorageService {
   /// Cross-tier profile (headline streak, achievements, cosmetics, notif prefs).
   PlayerProfile loadProfile();
   Future<void> saveProfile(PlayerProfile profile);
+
+  /// Append-only day-result history (Phase 4), powering the stats calendar.
+  /// [loadHistory] returns the persisted results in insertion (chronological)
+  /// order, oldest first; an empty list when nothing has been recorded (so it
+  /// loads cleanly for pre-Phase-4 players). [appendResult] adds one result and
+  /// caps the log to [kHistoryRetentionDays] entries, dropping the oldest.
+  List<DayResult> loadHistory();
+  Future<void> appendResult(DayResult result);
 }
 
 class InMemoryStorageService implements StorageService {
   final Map<String, GameSnapshot> _snapshots = {};
   final Map<String, LifetimeStats> _stats = {};
   PlayerProfile _profile = PlayerProfile.empty;
+  final List<DayResult> _history = [];
 
   static String _snapKey(String date, Difficulty difficulty) =>
       '$date:${difficulty.name}';
@@ -328,5 +359,17 @@ class InMemoryStorageService implements StorageService {
   @override
   Future<void> saveProfile(PlayerProfile profile) async {
     _profile = profile;
+  }
+
+  @override
+  List<DayResult> loadHistory() => List<DayResult>.unmodifiable(_history);
+
+  @override
+  Future<void> appendResult(DayResult result) async {
+    _history.add(result);
+    // Cap to the retention window, dropping the oldest entries.
+    while (_history.length > kHistoryRetentionDays) {
+      _history.removeAt(0);
+    }
   }
 }

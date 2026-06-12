@@ -244,6 +244,7 @@ class _TierSelectScreenState extends State<TierSelectScreen> {
               )..init(difficulty: difficulty),
               child: GameScreen(
                 adService: widget.adService,
+                storage: widget.storage,
                 engagement: _engagement,
                 notifications: widget.notifications,
                 friendCode: _friendCode,

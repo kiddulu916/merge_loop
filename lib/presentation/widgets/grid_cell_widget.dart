@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../domain/models/cosmetic.dart';
 import '../../domain/models/tile.dart';
 import '../theme/tile_palette.dart';
+import 'tile_glyph.dart';
 
 /// Renders a single tile face (or an empty slot if [tile] is null).
 class GridCellWidget extends StatelessWidget {
@@ -12,11 +13,16 @@ class GridCellWidget extends StatelessWidget {
   /// Selected tile theme. Defaults to classic (the original ramp).
   final Cosmetic cosmetic;
 
+  /// When true, overlay a colorblind-safe per-tier pattern (Phase 4). The tier
+  /// numeral is always rendered regardless of this flag.
+  final bool colorblindMode;
+
   const GridCellWidget({
     super.key,
     required this.tile,
     required this.size,
     this.cosmetic = Cosmetic.classic,
+    this.colorblindMode = false,
   });
 
   @override
@@ -46,18 +52,12 @@ class GridCellWidget extends StatelessWidget {
       alignment: Alignment.center,
       child: t == null
           ? null
-          : FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Padding(
-                padding: EdgeInsets.all(size * 0.12),
-                child: Text(
-                  '${t.value}',
-                  style: TextStyle(
-                    color: TilePalette.textColorForTier(t.tier),
-                    fontWeight: FontWeight.w800,
-                    fontSize: size * 0.34,
-                  ),
-                ),
+          : ClipRRect(
+              borderRadius: BorderRadius.circular(size * 0.16),
+              child: TileGlyph(
+                tier: t.tier,
+                size: size,
+                colorblindMode: colorblindMode,
               ),
             ),
     );

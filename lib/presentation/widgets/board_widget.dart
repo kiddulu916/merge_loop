@@ -19,11 +19,15 @@ class BoardWidget extends StatelessWidget {
   /// Selected tile theme. Defaults to classic.
   final Cosmetic cosmetic;
 
+  /// When true, render colorblind-safe per-tier patterns on tiles (Phase 4).
+  final bool colorblindMode;
+
   const BoardWidget({
     super.key,
     required this.board,
     required this.onMerge,
     this.cosmetic = Cosmetic.classic,
+    this.colorblindMode = false,
   });
 
   bool _isMergeable(int fromIndex, int toIndex) {
@@ -74,7 +78,11 @@ class BoardWidget extends StatelessWidget {
             width: cell,
             height: cell,
             child: _DraggableTile(
-                index: i, tile: tile, size: cell, cosmetic: cosmetic),
+                index: i,
+                tile: tile,
+                size: cell,
+                cosmetic: cosmetic,
+                colorblindMode: colorblindMode),
           ));
         }
 
@@ -120,17 +128,23 @@ class _DraggableTile extends StatelessWidget {
   final Tile tile;
   final double size;
   final Cosmetic cosmetic;
+  final bool colorblindMode;
 
   const _DraggableTile({
     required this.index,
     required this.tile,
     required this.size,
     required this.cosmetic,
+    this.colorblindMode = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    final face = GridCellWidget(tile: tile, size: size, cosmetic: cosmetic);
+    final face = GridCellWidget(
+        tile: tile,
+        size: size,
+        cosmetic: cosmetic,
+        colorblindMode: colorblindMode);
     // The feedback intentionally omits the text label so that find.text()
     // in tests (and in the gesture pipeline) does not find a third instance
     // of the tile value floating in the overlay during a drag gesture.

@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:hive/hive.dart';
 
+import '../domain/constants.dart';
+import '../domain/models/day_result.dart';
 import '../domain/models/difficulty.dart';
 import 'storage_service.dart';
 
@@ -23,6 +25,11 @@ class HiveStorageService implements StorageService {
   static String _statsKey(Difficulty difficulty) => 'stats:${difficulty.name}';
 
   static const _profileKey = 'profile';
+
+  /// History is stored as a single JSON array string under this key. Small
+  /// (capped at [kHistoryRetentionDays] compact records) so a single read/write
+  /// is fine and keeps us TypeAdapter-free like the other payloads.
+  static const _historyKey = 'history';
 
   @override
   Future<void> init() async {
@@ -78,5 +85,31 @@ class HiveStorageService implements StorageService {
   @override
   Future<void> saveProfile(PlayerProfile profile) async {
     await _box.put(_profileKey, jsonEncode(profile.toJson()));
+  }
+
+  @override
+  List<DayResult> loadHistory() {
+    final raw = _box.get(_historyKey);
+    // Absent (pre-Phase-4) or corrupt: empty list (migration-free).
+    if (raw == null) return const [];
+    try {
+      final list = jsonDecode(raw) as List;
+      return list
+          .map((e) => DayResult.fromJson(Map<String, dynamic>.from(e as Map)))
+          .toList();
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  @override
+  Future<void> appendResult(DayResult result) async {
+    final history = List<DayResult>.of(loadHistory())..add(result);
+    // Cap to the retention window, dropping the oldest entries.
+    while (history.length > kHistoryRetentionDays) {
+      history.removeAt(0);
+    }
+    await _box.put(
+        _historyKey, jsonEncode(history.map((e) => e.toJson()).toList()));
   }
 }

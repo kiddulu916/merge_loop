@@ -30,6 +30,21 @@ const int kMaxHintsPerDay = 3;
 /// kMaxStreakFreezeTokens in storage.
 const int kMaxFreezeGrantsPerDay = 1;
 
+/// Phase 4 — undo. Free undos a player gets per tier-day before a rewarded ad is
+/// required for further undos. The undo only rewinds local board/PRNG/move-log
+/// state to keep the run replay-consistent; it never alters the seed-fixed drop
+/// schedule, so this cap is purely a frustration-relief / ad-frequency lever.
+const int kFreeUndosPerDay = 1;
+
+/// Phase 4 — depth of the bounded undo history stack. Caps memory and prevents
+/// undo-to-start abuse (a player can never rewind more than this many merges).
+const int kUndoStackDepth = 3;
+
+/// Phase 4 — stats calendar history retention. The append-only day-result log is
+/// capped to this many most-recent entries (oldest dropped) so storage stays
+/// bounded (~one year of daily results across tiers).
+const int kHistoryRetentionDays = 366;
+
 /// Maximum number of drops that can ever occur in one day.
 const int kMaxDrops = kMovesPerDay + kAdMoveReward * kMaxAdContinuesPerDay; // 39
 

@@ -21,4 +21,41 @@ class TilePalette {
   }
 
   static Color textColorForTier(int tier) => Colors.white;
+
+  /// Colorblind-safe pattern set (Phase 4), keyed by tile tier. Adjacent tiers
+  /// map to visually distinct patterns so tiles can be told apart WITHOUT relying
+  /// on hue (e.g. in grayscale). Tier 0 (empty) has no pattern. The pattern is a
+  /// subtle background overlay rendered behind the always-on numeral, so the
+  /// value stays legible.
+  ///
+  /// The cycle length (8) exceeds the typical run of adjacent live tiers, so no
+  /// two neighbouring tiers ever share a pattern in practice.
+  static TilePattern patternForTier(int tier) {
+    if (tier <= 0) return TilePattern.none;
+    const cycle = [
+      TilePattern.dots,
+      TilePattern.stripesDiagonal,
+      TilePattern.grid,
+      TilePattern.stripesHorizontal,
+      TilePattern.cross,
+      TilePattern.stripesVertical,
+      TilePattern.checker,
+      TilePattern.rings,
+    ];
+    return cycle[(tier - 1) % cycle.length];
+  }
+}
+
+/// A colorblind-safe tile pattern (Phase 4). Distinguishes tiers by shape, not
+/// hue. Painted as a subtle low-opacity overlay so the numeral stays readable.
+enum TilePattern {
+  none,
+  dots,
+  stripesDiagonal,
+  stripesHorizontal,
+  stripesVertical,
+  grid,
+  cross,
+  checker,
+  rings,
 }

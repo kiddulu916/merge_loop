@@ -6,10 +6,22 @@ import '../domain/engine/game_engine.dart';
 import '../domain/engine/prng.dart';
 import '../domain/models/board_state.dart';
 import '../domain/models/difficulty.dart';
+import '../domain/models/day_result.dart';
 import '../domain/models/game_status.dart';
 import '../domain/models/move.dart';
 import '../infrastructure/storage_service.dart';
 import 'game_state.dart';
+
+/// One entry in the bounded undo history (Phase 4). Captures the FULL pre-merge
+/// [board] (cells, score, moves, dropIndex, AND moveLog) so [GameCubit.undo]
+/// can restore the run atomically. [landingDraws] is the number of landing-PRNG
+/// draws taken before that merge (== the pre-merge `board.dropIndex`), used to
+/// deterministically rewind the landing stream by rebuild-and-advance.
+class _UndoFrame {
+  final BoardState board;
+  final int landingDraws;
+  const _UndoFrame({required this.board, required this.landingDraws});
+}
 
 /// Formats a DateTime as the canonical YYYY-MM-DD seeding key.
 String formatDate(DateTime d) =>
@@ -58,8 +70,30 @@ class GameCubit extends Cubit<GameState> {
   late List<int> _dropTiers;
   late Prng _landing;
 
+  /// The day's seeder, retained so the landing PRNG can be rebuilt from seed and
+  /// advanced to an arbitrary draw count (the deterministic rewind used by both
+  /// [init] on resume and [undo]).
+  late DailySeeder _seeder;
+
   /// Drop indices that are golden for this date+tier (seed-derived).
   late Set<int> _goldenDrops;
+
+  /// Bounded undo history (Phase 4): pre-merge frames, most-recent last. Capped
+  /// at [kUndoStackDepth] so memory stays trivial and a player can never rewind
+  /// to the start of the run.
+  final List<_UndoFrame> _undoStack = [];
+
+  /// Undos consumed this cubit lifetime (one tier's day). Gates the
+  /// [kFreeUndosPerDay] free cap; further undos require a rewarded-ad grant.
+  int _undosUsed = 0;
+
+  /// Whether the player may undo right now: there is a frame to pop and the run
+  /// is still live ([GamePlaying]). Free/ad gating is enforced separately in
+  /// [undo] / [undoAfterReward].
+  bool get canUndo => state is GamePlaying && _undoStack.isNotEmpty;
+
+  /// Whether an undo is available WITHOUT a rewarded ad (a free undo remains).
+  bool get canUndoFree => canUndo && _undosUsed < kFreeUndosPerDay;
 
   /// Rewarded-hint usage this cubit lifetime (one tier's day). Gates the
   /// per-day cap on the reveal-next-drop hint.
@@ -93,18 +127,18 @@ class GameCubit extends Cubit<GameState> {
   Future<void> init({required Difficulty difficulty}) async {
     _difficulty = difficulty;
     _date = todayProvider();
-    final seeder = DailySeeder(_date, difficulty);
-    final start = seeder.generate();
+    _seeder = DailySeeder(_date, difficulty);
+    final start = _seeder.generate();
     _dropTiers = start.dropTiers;
-    _goldenDrops = seeder.goldenDropIndices();
+    _goldenDrops = _seeder.goldenDropIndices();
+    // A fresh init (or resume) starts with no rewindable history.
+    _undoStack.clear();
+    _undosUsed = 0;
 
     final snap = storage.loadSnapshot(_date, difficulty);
     if (snap != null && snap.date == _date) {
       // Resume today: rebuild the landing stream to the saved position.
-      _landing = seeder.landingPrng();
-      for (var i = 0; i < snap.board.dropIndex; i++) {
-        _landing.nextU32();
-      }
+      _landing = _rebuildLandingTo(snap.board.dropIndex);
       if (snap.completed || snap.board.status != GameStatus.playing) {
         // Once-per-tier-per-day: a completed tier is locked, show the result.
         emit(GameOverShowScore(
@@ -119,7 +153,7 @@ class GameCubit extends Cubit<GameState> {
     }
 
     // Fresh day for this tier.
-    _landing = seeder.landingPrng();
+    _landing = _seeder.landingPrng();
     await storage.saveSnapshot(GameSnapshot(
         date: _date,
         difficulty: difficulty,
@@ -132,6 +166,17 @@ class GameCubit extends Cubit<GameState> {
     final s = state;
     if (s is! GamePlaying) return;
     if (!GameEngine.canMerge(s.board, fromIndex, toIndex)) return;
+
+    // Push a pre-merge frame so this merge can be undone. The landing PRNG has
+    // taken exactly `dropIndex` draws at this point (one per applied drop), so
+    // that count is the deterministic rewind target. Bounded depth.
+    _undoStack.add(_UndoFrame(
+      board: s.board,
+      landingDraws: s.board.dropIndex,
+    ));
+    if (_undoStack.length > kUndoStackDepth) {
+      _undoStack.removeAt(0);
+    }
 
     // Record the accepted move (same guard as the state change).
     final log = List<MoveEvent>.of(s.board.moveLog)
@@ -176,6 +221,20 @@ class GameCubit extends Cubit<GameState> {
         _coinsEarnedThisRun += kCompletionCoinReward;
         onCoinsEarned?.call(kCompletionCoinReward);
       }
+      // Record the day's result in the append-only history (Phase 4), once per
+      // locked tier-day (same guard as the stats fold). The run is now locked,
+      // so clear the rewindable history too.
+      if (firstCompletionToday) {
+        await storage.appendResult(DayResult(
+          date: _date,
+          difficulty: _difficulty,
+          score: board.score,
+          highestTier: board.highestTier,
+          // A "win" means the budget was spent down rather than dead-ending.
+          win: board.status == GameStatus.outOfMoves,
+        ));
+      }
+      _undoStack.clear();
       await _fireCompletionHook(board);
       emit(GameOverShowScore(
           board: board, date: _date, difficulty: _difficulty, stats: stats));
@@ -191,6 +250,57 @@ class GameCubit extends Cubit<GameState> {
     } else {
       emit(GamePlaying(board: board, difficulty: _difficulty));
     }
+  }
+
+  /// Deterministically rebuild the landing PRNG (stream B) and advance it to
+  /// [draws] draws taken. This is the exact rewind technique [init] uses on
+  /// resume: the stream is reproducible, so rebuilding from seed and re-drawing
+  /// N times lands on the same position as having drawn N times originally —
+  /// never reverse a PRNG.
+  Prng _rebuildLandingTo(int draws) {
+    final p = _seeder.landingPrng();
+    for (var i = 0; i < draws; i++) {
+      p.nextU32();
+    }
+    return p;
+  }
+
+  /// Undo the last merge (Phase 4), keeping the run replay-consistent. Restores
+  /// the pre-merge [BoardState] (cells, score, moves, dropIndex, AND moveLog —
+  /// so the trailing [MergeEvent] and the drop it caused are popped together),
+  /// then rewinds the landing PRNG to the saved draw count by deterministic
+  /// rebuild. Only valid during [GamePlaying]; no-op on an empty stack. Gated by
+  /// [kFreeUndosPerDay]; further undos require [undoAfterReward].
+  ///
+  /// INVARIANT: because the popped frame's board carries the pre-merge moveLog,
+  /// the persisted moveLog always equals the real board history after any
+  /// merge/undo sequence ⇒ Phase 2 server replay still reproduces the board.
+  Future<void> undo() async {
+    if (!canUndoFree) return;
+    _undosUsed++;
+    await _applyUndo();
+  }
+
+  /// Grant exactly one extra undo after a rewarded ad (call AFTER the ad's
+  /// reward fires). No-op if no frame is available or the run is locked. Does
+  /// NOT consume a free undo — it bypasses the [kFreeUndosPerDay] cap.
+  Future<void> undoAfterReward() async {
+    if (!canUndo) return;
+    await _applyUndo();
+  }
+
+  /// Pop the most-recent frame and restore board + landing-PRNG together.
+  Future<void> _applyUndo() async {
+    final frame = _undoStack.removeLast();
+    // Rewind stream B to the saved position (deterministic rebuild).
+    _landing = _rebuildLandingTo(frame.landingDraws);
+    // Persist the restored (not-completed) board so a resume sees the rewind.
+    await storage.saveSnapshot(GameSnapshot(
+        date: _date,
+        difficulty: _difficulty,
+        board: frame.board,
+        completed: false));
+    emit(GamePlaying(board: frame.board, difficulty: _difficulty));
   }
 
   /// Whether another rewarded hint may be shown today (per-tier-day cap).
