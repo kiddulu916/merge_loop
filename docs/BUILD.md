@@ -1,4 +1,4 @@
-# Building Merge Loop
+# Building Merge Count
 
 ## Online features (leaderboards, friends)
 
