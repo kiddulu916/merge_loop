@@ -70,7 +70,7 @@ Future<void> main() async {
     }
   }
 
-  // Deep links (mergeloop://invite/<code>). Captures cold-start links so a
+  // Deep links (mergecount://invite/<code>). Captures cold-start links so a
   // redeem isn't lost before the app is ready; the app replays the pending code
   // once a signed-in session + display name exist (Phase 3 failure-mode).
   DeepLinkService? deepLinks;

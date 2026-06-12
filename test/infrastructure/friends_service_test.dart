@@ -46,11 +46,11 @@ void main() {
   group('inviteLink', () {
     test('builds the custom-scheme deep link', () {
       expect(FriendsService.inviteLink('ABCD2345'),
-          'mergeloop://invite/ABCD2345');
+          'mergecount://invite/ABCD2345');
     });
     test('builds the https fallback', () {
       expect(FriendsService.inviteHttpsLink('ABCD2345'),
-          'https://mergeloop.app/invite/ABCD2345');
+          'https://mergecount.app/invite/ABCD2345');
     });
   });
 

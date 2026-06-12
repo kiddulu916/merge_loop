@@ -10,22 +10,22 @@
 	     codes fully usable. -->
 	<key>NSContactsUsageDescription</key>
 	<string>Merge Count can find friends who already play. Your contacts never leave your device — only secure, anonymized fingerprints are checked. You can always add friends by code instead.</string>
-	<!-- Invite deep links: mergeloop://invite/<code> -->
+	<!-- Invite deep links: mergecount://invite/<code> -->
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>CFBundleURLName</key>
-			<string>com.mergeloop.invite</string>
+			<string>com.mergecount.invite</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>mergeloop</string>
+				<string>mergecount</string>
 			</array>
 		</dict>
 	</array>
 	<!-- Universal Links (https) require an associated-domains entitlement +
-	     apple-app-site-association hosted on mergeloop.app; see spec Open Items.
+	     apple-app-site-association hosted on mergecount.app; see spec Open Items.
 	     The custom scheme above works without that setup. -->
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>

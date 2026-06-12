@@ -5,8 +5,8 @@ import 'package:app_links/app_links.dart';
 /// Parses invite deep links and bridges them to a redeem callback.
 ///
 /// Supported forms:
-///   mergeloop://invite/<code>          (custom scheme)
-///   https://mergeloop.app/invite/<code> (App Links / Universal Links fallback)
+///   mergecount://invite/<code>          (custom scheme)
+///   https://mergecount.app/invite/<code> (App Links / Universal Links fallback)
 ///
 /// The PURE part — [parseInviteCode] — is fully unit-tested. The app_links
 /// wiring (cold-start `getInitialLink` + warm `uriLinkStream`) is isolated here
@@ -34,8 +34,8 @@ class DeepLinkService {
   /// Pure parser: extract the invite code from a deep-link [uri], or null if it
   /// isn't an invite link. Accepts both the custom scheme and the https path.
   static String? parseInviteCode(Uri uri) {
-    // mergeloop://invite/<code>  → host == 'invite', first path segment is code.
-    if (uri.scheme == 'mergeloop') {
+    // mergecount://invite/<code>  → host == 'invite', first path segment is code.
+    if (uri.scheme == 'mergecount') {
       if (uri.host == 'invite') {
         final segs = uri.pathSegments.where((s) => s.isNotEmpty).toList();
         if (segs.isNotEmpty) return segs.first;

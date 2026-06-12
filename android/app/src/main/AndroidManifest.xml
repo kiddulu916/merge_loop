@@ -33,21 +33,21 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
-            <!-- Invite deep links: mergeloop://invite/<code> -->
+            <!-- Invite deep links: mergecount://invite/<code> -->
             <intent-filter android:autoVerify="false">
                 <action android:name="android.intent.action.VIEW"/>
                 <category android:name="android.intent.category.DEFAULT"/>
                 <category android:name="android.intent.category.BROWSABLE"/>
-                <data android:scheme="mergeloop" android:host="invite"/>
+                <data android:scheme="mergecount" android:host="invite"/>
             </intent-filter>
-            <!-- App Links (https) fallback: https://mergeloop.app/invite/<code>.
+            <!-- App Links (https) fallback: https://mergecount.app/invite/<code>.
                  autoVerify requires a hosted assetlinks.json; left enabled so it
                  can be verified once the domain is configured (see Open Items). -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW"/>
                 <category android:name="android.intent.category.DEFAULT"/>
                 <category android:name="android.intent.category.BROWSABLE"/>
-                <data android:scheme="https" android:host="mergeloop.app"
+                <data android:scheme="https" android:host="mergecount.app"
                       android:pathPrefix="/invite"/>
             </intent-filter>
         </activity>

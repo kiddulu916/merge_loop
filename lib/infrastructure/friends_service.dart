@@ -77,11 +77,11 @@ class FriendsService {
   }
 
   /// Build the deep link a friend taps to add you.
-  static String inviteLink(String code) => 'mergeloop://invite/$code';
+  static String inviteLink(String code) => 'mergecount://invite/$code';
 
   /// Build the https fallback invite link.
   static String inviteHttpsLink(String code) =>
-      'https://mergeloop.app/invite/$code';
+      'https://mergecount.app/invite/$code';
 
   /// Redeem a friend code (typed or from a deep link). Creates the mutual edge
   /// via the `redeem_code` RPC (rejects self-add; idempotent).
